@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* LeadVeed brand: deep ink, electric violet, and a lime signal colour */
+  --color-ink-950: #07081a;
+  --color-ink-900: #0d0f26;
+  --color-ink-800: #161a3a;
+  --color-ink-700: #23284f;
+  --color-ink-600: #3a4072;
+  --color-ink-500: #5b6191;
+  --color-ink-400: #8a8fb5;
+  --color-ink-300: #b7bad3;
+  --color-ink-200: #dcdeec;
+  --color-ink-100: #eef0f7;
+  --color-ink-50: #f7f8fc;
+
+  --color-brand-50: #f1efff;
+  --color-brand-100: #e4dfff;
+  --color-brand-200: #cbc1ff;
+  --color-brand-300: #a898ff;
+  --color-brand-400: #8a74ff;
+  --color-brand-500: #6e56ff;
+  --color-brand-600: #5a3ff2;
+  --color-brand-700: #4a30d0;
+  --color-brand-800: #3c28a6;
+  --color-brand-900: #2f2280;
+
+  --color-signal-300: #e2ff8a;
+  --color-signal-400: #cdfb4f;
+  --color-signal-500: #b5ec22;
+  --color-signal-600: #8fc00f;
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+
+  --shadow-card: 0 1px 2px rgb(13 15 38 / 0.04), 0 4px 16px -4px rgb(13 15 38 / 0.08);
+  --shadow-pop: 0 10px 40px -10px rgb(90 63 242 / 0.35);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  @keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+  }
+}
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    @apply bg-white text-ink-900 antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection { @apply bg-brand-200 text-ink-950; }
+  h1, h2, h3 { @apply font-display tracking-tight; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand-500; }
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+    transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap;
+}
+@utility btn-primary { @apply btn bg-brand-600 text-white shadow-pop hover:bg-brand-700 active:scale-[0.98]; }
+@utility btn-signal { @apply btn bg-signal-400 text-ink-950 hover:bg-signal-300 active:scale-[0.98]; }
+@utility btn-ghost { @apply btn text-ink-700 hover:bg-ink-100; }
+@utility btn-outline { @apply btn border border-ink-200 bg-white text-ink-800 hover:border-ink-300 hover:bg-ink-50; }
+@utility btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+
+@layer components {
+  .card { @apply rounded-2xl border border-ink-100 bg-white shadow-card; }
+  .input {
+    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900
+      placeholder:text-ink-400 transition focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100;
+  }
+  .label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-500; }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-700;
+  }
+  .eyebrow { @apply text-xs font-bold uppercase tracking-[0.18em] text-brand-600; }
+  .prose-legal { @apply max-w-3xl text-[15px] leading-7 text-ink-700; }
+  .prose-legal h2 { @apply mt-10 mb-3 text-xl font-bold text-ink-950; }
+  .prose-legal h3 { @apply mt-6 mb-2 font-semibold text-ink-900; }
+  .prose-legal p { @apply mb-4; }
+  .prose-legal ul { @apply mb-4 list-disc pl-6 space-y-1.5; }
+  .prose-legal a { @apply font-medium text-brand-700 underline decoration-brand-200 underline-offset-4 hover:decoration-brand-500; }
+  .skeleton {
+    @apply rounded-md bg-ink-100;
+    background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.6) 50%, transparent 100%);
+    background-size: 400px 100%;
+    background-repeat: no-repeat;
+    animation: var(--animate-shimmer);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+}

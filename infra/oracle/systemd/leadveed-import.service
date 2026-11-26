@@ -1,0 +1,14 @@
+[Unit]
+Description=LeadVeed monthly data import (Overture Maps + All The Places)
+After=network-online.target postgresql.service typesense-server.service
+
+[Service]
+Type=oneshot
+User=leadveed
+WorkingDirectory=/srv/leadveed/app/pipeline
+EnvironmentFile=/etc/leadveed/leadveed.env
+# Imports only when a new Overture release is out (the command exits early otherwise).
+ExecStart=/srv/leadveed/venv/bin/python -m leadveed_pipeline run
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=12h

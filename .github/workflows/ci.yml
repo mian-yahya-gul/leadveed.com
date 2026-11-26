@@ -1,0 +1,54 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r pipeline/requirements.txt pytest
+      - run: python -m pytest -q pipeline/tests
+        env: { PYTHONPATH: pipeline }
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env: { POSTGRES_USER: leadveed, POSTGRES_PASSWORD: ci, POSTGRES_DB: leadveed }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://leadveed:ci@localhost:5432/leadveed
+      TEST_DATABASE_URL: postgresql://leadveed:ci@localhost:5432/leadveed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm ci
+      - run: psql "$DATABASE_URL" -q -f db/schema.sql
+      - name: Load a small test dataset (pipeline fixture)
+        run: |
+          pip install -r pipeline/requirements.txt
+          PYTHONPATH=pipeline python pipeline/tests/make_fixture.py /tmp/fixture.parquet
+          PYTHONPATH=pipeline python -m leadveed_pipeline --data-dir /tmp/lv run --release ci --overture-file /tmp/fixture.parquet --no-atp --force
+      - run: npm run typecheck -w apps/api
+      - run: npm test -w apps/api
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsc --noEmit -p apps/web
+      - run: npm run build -w apps/web
+        env: { AUTH_SECRET: ci-only-secret }

@@ -1,0 +1,9 @@
+[Unit]
+Description=Back up LeadVeed accounts to Cloudflare R2
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=leadveed
+EnvironmentFile=/etc/leadveed/leadveed.env
+ExecStart=/srv/leadveed/app/infra/oracle/backup.sh

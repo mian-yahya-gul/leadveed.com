@@ -1,0 +1,6 @@
+duckdb>=1.1
+pyarrow>=17
+psycopg[binary]>=3.2
+requests>=2.32
+numpy>=1.26
+numpy>=1.26
