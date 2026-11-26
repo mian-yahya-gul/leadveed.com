@@ -12,6 +12,8 @@ export const config = {
   internalKey: req("INTERNAL_API_KEY", process.env.NODE_ENV === "production" ? undefined : "dev-internal-key"),
   typesenseUrl: process.env.TYPESENSE_URL ?? "",
   typesenseKey: process.env.TYPESENSE_API_KEY ?? "",
+  /** Countries held in Typesense (fast search). Empty = all. Other countries are searched in Postgres. */
+  typesenseCountries: (process.env.TYPESENSE_COUNTRIES ?? "").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
   siteUrl: process.env.SITE_URL ?? "http://localhost:3000",
   resendKey: process.env.RESEND_API_KEY ?? "",
   emailFrom: process.env.EMAIL_FROM ?? "LeadVeed <hello@leadveed.com>",

@@ -60,13 +60,24 @@ Check: `curl https://api.leadveed.com/health` should answer `{"ok":true}` once D
 
 ## 4. First data import
 
-Choose your countries in `/etc/leadveed/leadveed.env` (`LEADVEED_COUNTRIES`). The default covers Pakistan, the
-Gulf, the UK, US, Canada, Australia and India. The whole world (~60M places) fits on disk, but Typesense keeps its
-index in memory and won't fit in 24 GB, so grow coverage country by country.
+By default LeadVeed imports **the whole world** (about 60 million places). Two settings in
+`/etc/leadveed/leadveed.env` control this:
+
+- `LEADVEED_COUNTRIES` (empty = whole world) decides what goes into Postgres. Every lead page, unlock and
+  export works for every country.
+- `TYPESENSE_COUNTRIES` decides which countries also get Typesense, the in-memory search engine that gives
+  instant, typo-tolerant results. The whole world doesn't fit in this server's 24 GB of RAM, so the default
+  is Pakistan, the Gulf, the UK, Canada, Australia and India. Searches in any other country, or with no
+  country picked, are answered by Postgres instead: a bit slower (usually well under a second for a
+  country + city search) but complete. Add countries as you see demand, then run
+  `python -m leadveed_pipeline index`. Watch memory with `free -h` and keep a few GB spare.
+
+Disk: a world import needs roughly 150 GB at its peak (download, working files and the database) and settles
+around 90 GB, so give the VM the full 200 GB boot volume.
 
 ```bash
 sudo systemctl start leadveed-import
-journalctl -fu leadveed-import        # follow progress; 1-4 hours the first time
+journalctl -fu leadveed-import        # follow progress; 4-8 hours the first time for the whole world
 ```
 
 After that the nightly timer checks for a new Overture release and imports it automatically (about monthly).

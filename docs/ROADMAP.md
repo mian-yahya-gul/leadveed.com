@@ -15,6 +15,7 @@
 - Tech stack detection (CMS, analytics, ads pixels, booking tools) from the homepage
 - Built-in email and WhatsApp outreach sequences
 - New-business alerts on saved searches (the `saved_searches.alert` column is ready)
+- Move more countries into Typesense (or add a second free Oracle VM) as traffic grows
 - Deeper Pakistan and Gulf coverage: local business registries and chambers of commerce where the licence allows
 - Pricing in PKR / AED / SAR at checkout
 - SEO landing pages per city × category (e.g. /pk/lahore/dental-clinics)

@@ -55,6 +55,10 @@ CREATE INDEX IF NOT EXISTS places_categories    ON places USING gin (categories)
 CREATE INDEX IF NOT EXISTS places_name_trgm     ON places USING gin (name_norm gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS places_domain        ON places (domain) WHERE domain IS NOT NULL;
 CREATE INDEX IF NOT EXISTS places_first_seen    ON places (first_seen);
+-- Postgres answers searches for countries not held in Typesense; these keep them fast at world scale.
+CREATE INDEX IF NOT EXISTS places_quality       ON places (quality_score DESC);
+CREATE INDEX IF NOT EXISTS places_country_q     ON places (country, quality_score DESC);
+CREATE INDEX IF NOT EXISTS places_city_q        ON places (country, lower(city), quality_score DESC);
 CREATE INDEX IF NOT EXISTS places_pagespeed_due ON places (pagespeed_checked_at NULLS FIRST) WHERE domain IS NOT NULL;
 
 -- Summary tables refreshed after each import (pipeline/load.py).

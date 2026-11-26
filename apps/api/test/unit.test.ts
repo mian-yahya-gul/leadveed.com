@@ -40,3 +40,18 @@ describe("lemon squeezy signature", () => {
     expect(verifySignature(raw, undefined, "s3cret")).toBe(false);
   });
 });
+
+describe("search routing", async () => {
+  const { config } = await import("../src/config.js");
+  const { useTypesense } = await import("../src/lib/search.js");
+  it("uses Typesense only for countries it holds", () => {
+    Object.assign(config, { typesenseUrl: "http://ts", typesenseCountries: ["PK", "AE"] });
+    expect(useTypesense(SearchQuery.parse({ country: "pk" }))).toBe(true);
+    expect(useTypesense(SearchQuery.parse({ country: "PK,DE" }))).toBe(false);
+    expect(useTypesense(SearchQuery.parse({}))).toBe(false);
+    Object.assign(config, { typesenseCountries: [] });
+    expect(useTypesense(SearchQuery.parse({}))).toBe(true);
+    Object.assign(config, { typesenseUrl: "" });
+    expect(useTypesense(SearchQuery.parse({ country: "PK" }))).toBe(false);
+  });
+});

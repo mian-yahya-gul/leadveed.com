@@ -152,9 +152,20 @@ async function postgresSearch(q: SearchQuery): Promise<SearchResult> {
     facets, tookMs: Date.now() - t0, backend: "postgres" };
 }
 
+/**
+ * Typesense holds the busiest countries in memory for instant, typo-tolerant search.
+ * Everything else (and world-wide searches when Typesense holds only some countries)
+ * is answered by Postgres, which has every lead.
+ */
+export function useTypesense(q: SearchQuery): boolean {
+  if (!config.typesenseUrl) return false;
+  const held = config.typesenseCountries;
+  if (held.length === 0) return true;
+  return q.country.length > 0 && q.country.every((c) => held.includes(c.toUpperCase()));
+}
+
 export async function search(q: SearchQuery): Promise<SearchResult> {
-  if (config.typesenseUrl) return typesenseSearch(q);
-  return postgresSearch(q);
+  return useTypesense(q) ? typesenseSearch(q) : postgresSearch(q);
 }
 
 /** All ids for an export, in result order, capped. */

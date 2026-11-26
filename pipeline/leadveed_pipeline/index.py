@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from datetime import date, datetime
 
@@ -84,7 +85,18 @@ class Typesense:
         return r
 
 
+def countries_where(raw: str | None) -> str | None:
+    """SQL filter for TYPESENSE_COUNTRIES (comma separated ISO codes); None means every country."""
+    codes = [c.strip().upper() for c in (raw or "").split(",") if c.strip()]
+    for c in codes:
+        if len(c) != 2 or not c.isalpha():
+            raise ValueError(f"bad country code in TYPESENSE_COUNTRIES: {c!r}")
+    return "country IN (" + ",".join(f"'{c}'" for c in codes) + ")" if codes else None
+
+
 def rebuild(dsn: str, ts_url: str, ts_key: str, batch: int = 20_000, where: str | None = None) -> int:
+    if where is None:
+        where = countries_where(os.environ.get("TYPESENSE_COUNTRIES"))
     ts = Typesense(ts_url, ts_key)
     name = f"places_{int(time.time())}"
     ts.req("POST", "/collections", json=schema(name))
@@ -118,8 +130,9 @@ def upsert_ids(dsn: str, ts_url: str, ts_key: str, ids: list[str]) -> None:
     if not ids:
         return
     ts = Typesense(ts_url, ts_key)
+    extra = countries_where(os.environ.get("TYPESENSE_COUNTRIES"))
     with psycopg.connect(dsn) as conn:
-        rows = conn.execute(SELECT + " WHERE id = ANY(%s)", (ids,)).fetchall()
+        rows = conn.execute(SELECT + " WHERE id = ANY(%s)" + (f" AND {extra}" if extra else ""), (ids,)).fetchall()
     found = {r[0] for r in rows}
     if rows:
         body = "\n".join(json.dumps(_doc(r), ensure_ascii=False) for r in rows)

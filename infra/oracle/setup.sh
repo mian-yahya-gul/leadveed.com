@@ -139,6 +139,6 @@ Next steps:
      then: sudo systemctl restart leadveed-api
   2. Copy this value into Vercel as LEADVEED_INTERNAL_KEY:
        $(grep ^INTERNAL_API_KEY $ENV_FILE | cut -d= -f2)
-  3. Start the first import now (takes 1-4 hours depending on countries):
+  3. Start the first import now (4-8 hours for the whole world):
        sudo systemctl start leadveed-import && journalctl -fu leadveed-import
 DONE
