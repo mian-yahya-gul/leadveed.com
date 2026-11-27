@@ -152,7 +152,7 @@ cat <<DONE
 ✅ LeadVeed server is ready.
 
 Next steps:
-  1. Edit $ENV_FILE and fill in RESEND_API_KEY, PAGESPEED_API_KEY, Lemon Squeezy and R2 values,
+  1. Edit $ENV_FILE and fill in RESEND_API_KEY, PAGESPEED_API_KEY, payment and BACKUP_S3_* values,
      then: sudo systemctl restart leadveed-api
   2. Edit $WEB_ENV and fill in the Google, Resend and Lemon Squeezy values,
      then: sudo /srv/leadveed/app/infra/oracle/deploy.sh
