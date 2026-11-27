@@ -1,0 +1,71 @@
+# Keeps asking Oracle for the Always Free A1 server (4 OCPU / 24 GB in Singapore) until capacity frees up.
+# Runs every 5 minutes; each run tries for about 5 minutes. Delete this workflow once the server exists.
+#
+# Secret ORACLE_RETRY_BUNDLE: base64 tar.gz of gh.pem (Oracle API key), gh_config (OCI CLI config),
+# ud.sh (cloud-init that runs infra/oracle/setup.sh) and key.pub (SSH public key), made in Cloud Shell.
+name: Oracle free server retry
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-retry
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install OCI CLI
+        run: pipx install oci-cli >/dev/null && oci --version
+
+      - name: Unpack credentials
+        env:
+          BUNDLE: ${{ secrets.ORACLE_RETRY_BUNDLE }}
+        run: |
+          test -n "$BUNDLE" || { echo "ORACLE_RETRY_BUNDLE secret is missing"; exit 1; }
+          mkdir -p ~/.oci ~/lv && chmod 700 ~/.oci
+          echo "$BUNDLE" | base64 -d | tar xzf - -C ~/lv
+          mv ~/lv/gh.pem ~/.oci/key.pem && mv ~/lv/gh_config ~/.oci/config
+          chmod 600 ~/.oci/key.pem ~/.oci/config
+
+      - name: Try to launch
+        run: |
+          set -u
+          cd ~/lv
+          C=$(sed -n 's/^tenancy=//p' ~/.oci/config)
+          AD=$(oci iam availability-domain list -c "$C" --query 'data[0].name' --raw-output)
+          SUB=$(oci network subnet list -c "$C" --all --query "data[?contains(\"display-name\",'public')].id | [0]" --raw-output)
+          IMG=$(oci compute image list -c "$C" --operating-system "Canonical Ubuntu" --operating-system-version "24.04" \
+                --shape VM.Standard.A1.Flex --sort-by TIMECREATED --sort-order DESC --query 'data[0].id' --raw-output)
+          end=$((SECONDS + 300))
+          i=0
+          while [ $SECONDS -lt $end ]; do
+            i=$((i + 1))
+            N=$(oci compute instance list -c "$C" --lifecycle-state RUNNING --query "length(data[?\"display-name\"=='leadveed'])" --raw-output 2>/dev/null)
+            P=$(oci compute instance list -c "$C" --lifecycle-state PROVISIONING --query "length(data[?\"display-name\"=='leadveed'])" --raw-output 2>/dev/null)
+            if [ "${N:-0}" != "0" ] || [ "${P:-0}" != "0" ]; then
+              echo "LAUNCHED_ALREADY"
+              echo "### Server exists. Disable this workflow." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            # Alternate the full size with the half size, which fits in gaps more often.
+            if [ $((i % 2)) -eq 0 ]; then S='{"ocpus":4,"memoryInGBs":24}'; else S='{"ocpus":2,"memoryInGBs":12}'; fi
+            out=$(oci compute instance launch --no-retry --availability-domain "$AD" -c "$C" --shape VM.Standard.A1.Flex \
+                  --shape-config "$S" --subnet-id "$SUB" --assign-public-ip true --display-name leadveed \
+                  --image-id "$IMG" --boot-volume-size-in-gbs 200 --ssh-authorized-keys-file key.pub \
+                  --user-data-file ud.sh 2>&1)
+            if echo "$out" | grep -q '"lifecycle-state"'; then
+              echo "LAUNCHED $S"
+              echo "### LAUNCHED $S" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$(date -u +%H:%M:%S) try $i $S: $(echo "$out" | grep -o '"message": "[^"]*' | head -c 90)"
+            sleep 70
+          done
