@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write # lets a run queue the next one (GitHub's 5-minute schedule can lag for hours)
 
 jobs:
   launch:
@@ -38,6 +39,7 @@ jobs:
           chmod 600 ~/.oci/key.pem ~/.oci/config
 
       - name: Try to launch
+        id: try
         run: |
           set -u
           cd ~/lv
@@ -55,6 +57,7 @@ jobs:
             P=$(oci compute instance list -c "$C" --lifecycle-state PROVISIONING --query "length(data[?\"display-name\"=='leadveed'])" --raw-output 2>/dev/null || true)
             if [ "${N:-0}" != "0" ] || [ "${P:-0}" != "0" ]; then
               echo "LAUNCHED_ALREADY"
+              echo "launched=1" >> "$GITHUB_OUTPUT"
               echo "### Server exists. Disable this workflow." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
@@ -66,9 +69,16 @@ jobs:
                   --user-data-file ud.sh 2>&1 || true)
             if echo "$out" | grep -q '"lifecycle-state"'; then
               echo "LAUNCHED $S"
+              echo "launched=1" >> "$GITHUB_OUTPUT"
               echo "### LAUNCHED $S" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             echo "$(date -u +%H:%M:%S) try $i $S: $(echo "$out" | grep -o '"message": "[^"]*' | head -c 90)"
             sleep 70
           done
+
+      - name: Queue the next run
+        if: success() && steps.try.outputs.launched != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run oracle-retry.yml --repo "$GITHUB_REPOSITORY" --ref main
