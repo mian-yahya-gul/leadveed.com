@@ -51,7 +51,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <p className="mt-2 text-xs text-ink-500">{me.plan.id === "free" ? "One-time welcome credits" : `${nf.format(me.plan.credits)} added each month`}</p>
             <div className="mt-5 flex gap-2">
               <Link href="/pricing" className="btn-primary btn-sm">{me.plan.id === "free" ? "Upgrade" : "Change plan"}</Link>
-              {me.plan.id !== "free" && process.env.LS_CUSTOMER_PORTAL && <a href={process.env.LS_CUSTOMER_PORTAL} className="btn-outline btn-sm">Billing</a>}
+              {me.plan.id !== "free" && process.env.PADDLE_CUSTOMER_PORTAL && <a href={process.env.PADDLE_CUSTOMER_PORTAL} className="btn-outline btn-sm">Billing</a>}
             </div>
           </div>
           <Kpi icon={Unlock} label="Leads unlocked" value={me.counts.unlocked} />

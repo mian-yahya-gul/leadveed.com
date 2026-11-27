@@ -6,7 +6,7 @@ city, filter for the ones with no website or a slow one, see a quality score on 
 | | |
 |---|---|
 | `apps/web` | Next.js 16 web app (runs on the Oracle server): landing, search, lead pages, pricing, sign-in, dashboard, legal pages |
-| `apps/api` | Fastify API (Oracle VM): search, unlocks and credits, CSV export, lists, removal requests, Lemon Squeezy webhooks, PageSpeed worker |
+| `apps/api` | Fastify API (Oracle VM): search, unlocks and credits, CSV export, lists, removal requests, Paddle webhooks, PageSpeed worker |
 | `pipeline` | Python + DuckDB importer: Overture Maps + All The Places → normalise → de-duplicate and merge → quality score → Postgres → Typesense |
 | `db/schema.sql` | Postgres 16 + PostGIS schema |
 | `infra/oracle` | One-command server setup, systemd timers, Caddy, backups, deploy script |

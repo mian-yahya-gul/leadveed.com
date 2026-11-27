@@ -5,7 +5,7 @@
 - [x] Search by country, city, industry, business type, keyword, website / no website, phone, email, socials, quality, slow website, new businesses, map view
 - [x] Lead pages with contact details, map, quality breakdown, PageSpeed score, sources, similar businesses
 - [x] Accounts (Google, email link), credits, unlock once / re-export free, CSV export with cost preview, lists
-- [x] Pricing with Lemon Squeezy subscriptions and local-currency display
+- [x] Pricing with Paddle subscriptions and local-currency display
 - [x] Data licensing, privacy, terms, "remove my data" with email confirmation and suppression
 - [x] Oracle server setup, nightly import timer, PageSpeed worker, R2 backups, CI and deploys
 

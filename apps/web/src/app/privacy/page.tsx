@@ -24,7 +24,7 @@ export default function Privacy() {
       <ul>
         <li><b>Account data:</b> your name, email address and profile picture from your sign-in provider.</li>
         <li><b>Usage data:</b> the searches you run, the leads you unlock and export, your lists and your credit history, so the product works and your bill is right.</li>
-        <li><b>Payments:</b> handled by Lemon Squeezy as merchant of record. We never see or store your card details.</li>
+        <li><b>Payments:</b> handled by Paddle (Paddle.com) as merchant of record. We never see or store your card details.</li>
         <li><b>Email:</b> sign-in links and account messages are sent through Resend.</li>
         <li><b>Security:</b> Cloudflare protects the site from abuse and may process your IP address for that purpose.</li>
       </ul>

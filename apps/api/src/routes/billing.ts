@@ -3,28 +3,40 @@ import type { FastifyInstance } from "fastify";
 import type { PoolClient } from "pg";
 import { config } from "../config.js";
 import { pool, tx } from "../lib/db.js";
-import { PLANS, planForVariant, type PlanId } from "../plans.js";
+import { PLANS, planForPrice, type PlanId } from "../plans.js";
 
 async function grantIn(c: PoolClient, userId: string, delta: number, reason: string, ref: string) {
   await c.query("UPDATE users SET credits = credits + $2, credits_reset_at = now() WHERE id = $1", [userId, delta]);
   await c.query("INSERT INTO credit_ledger (user_id, delta, reason, ref) VALUES ($1, $2, $3, $4)", [userId, delta, reason, ref]);
 }
 
-export function verifySignature(raw: Buffer, signature: string | undefined, secret: string): boolean {
-  if (!signature || !secret) return false;
-  const digest = createHmac("sha256", secret).update(raw).digest("hex");
-  const a = Buffer.from(digest, "utf8");
-  const b = Buffer.from(signature, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
+/** Reject webhooks older than this, so a captured request can't be replayed later. */
+const MAX_AGE_SECONDS = 5 * 60;
+
+/**
+ * Verify a Paddle-Signature header ("ts=1700000000;h1=<hex>"): HMAC-SHA256 of "<ts>:<raw body>"
+ * with the notification destination's secret key.
+ */
+export function verifyPaddleSignature(raw: Buffer, header: string | undefined, secret: string,
+  now = Math.floor(Date.now() / 1000)): boolean {
+  if (!header || !secret) return false;
+  const parts = Object.fromEntries(header.split(";").map((p) => p.split("=", 2) as [string, string]));
+  const ts = Number(parts.ts);
+  if (!parts.ts || !Number.isFinite(ts) || Math.abs(now - ts) > MAX_AGE_SECONDS) return false;
+  const digest = createHmac("sha256", secret).update(`${parts.ts}:`).update(raw).digest("hex");
+  // Paddle may send several h1 values while a secret is being rotated.
+  return header.split(";").filter((p) => p.startsWith("h1=")).some((p) => {
+    const a = Buffer.from(digest, "utf8");
+    const b = Buffer.from(p.slice(3), "utf8");
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
 }
 
 /**
- * Lemon Squeezy webhooks. Configure in Lemon Squeezy -> Settings -> Webhooks:
- *   URL:    https://api.leadveed.com/webhooks/lemonsqueezy
- *   Events: subscription_created, subscription_updated, subscription_cancelled,
- *           subscription_expired, subscription_payment_success
- * The web app's checkout links pass checkout[custom][user_id], which comes
- * back here as meta.custom_data.user_id.
+ * Paddle Billing webhooks. Configure in Paddle -> Developer tools -> Notifications -> New destination:
+ *   URL:    https://api.leadveed.com/webhooks/paddle
+ *   Events: subscription.created, subscription.updated, subscription.canceled, transaction.completed
+ * The web app's checkout passes customData.user_id, which Paddle stores on the subscription.
  */
 export async function billingRoutes(app: FastifyInstance) {
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (req, body, done) => {
@@ -32,63 +44,59 @@ export async function billingRoutes(app: FastifyInstance) {
     try { done(null, JSON.parse(body.toString() || "null")); } catch (e) { done(e as Error); }
   });
 
-  app.post("/webhooks/lemonsqueezy", async (req, reply) => {
+  app.post("/webhooks/paddle", async (req, reply) => {
     const raw = req.body as Buffer;
-    if (!verifySignature(raw, req.headers["x-signature"] as string | undefined, config.lemonSigningSecret)) {
+    if (!verifyPaddleSignature(raw, req.headers["paddle-signature"] as string | undefined, config.paddleWebhookSecret)) {
       return reply.code(401).send({ error: "bad_signature" });
     }
     const evt = JSON.parse(raw.toString());
-    const name: string = evt.meta?.event_name;
-    const userId: string | undefined = evt.meta?.custom_data?.user_id;
-    const attrs = evt.data?.attributes ?? {};
-    const eventId = `${name}:${evt.data?.id}:${attrs.updated_at ?? attrs.created_at ?? ""}`;
+    const type: string = evt.event_type;
+    const data = evt.data ?? {};
     const fresh = await pool.query(
-      "INSERT INTO webhook_events (id, provider, payload) VALUES ($1, 'lemonsqueezy', $2) ON CONFLICT DO NOTHING",
-      [eventId, evt]);
+      "INSERT INTO webhook_events (id, provider, payload) VALUES ($1, 'paddle', $2) ON CONFLICT DO NOTHING",
+      [String(evt.event_id), evt]);
     if (!fresh.rowCount) return { ok: true, duplicate: true };
-    if (!userId) return { ok: true, ignored: "no user_id" };
-
-    const subscriptionId = name === "subscription_payment_success" ? String(attrs.subscription_id) : String(evt.data?.id);
-    const plan: PlanId | null = planForVariant(attrs.variant_id);
 
     await tx(async (c) => {
-      switch (name) {
-        case "subscription_created":
-        case "subscription_updated": {
-          const { rows: [u] } = await c.query<{ plan: PlanId }>("SELECT plan FROM users WHERE id = $1 FOR UPDATE", [userId]);
-          if (!u) break;
-          await c.query(
-            `UPDATE users SET plan = coalesce($2, plan), ls_customer_id = $3, ls_subscription_id = $4, subscription_status = $5
-             WHERE id = $1`, [userId, plan, String(attrs.customer_id ?? ""), subscriptionId, attrs.status ?? null]);
-          // First subscription grants the month's credits; an upgrade grants the difference right away.
-          const before = name === "subscription_created" ? 0 : (PLANS[u.plan]?.credits ?? 0);
-          const after = plan ? PLANS[plan].credits : 0;
-          if (plan && plan !== u.plan && after > before) {
-            await grantIn(c, userId, after - before, name === "subscription_created" ? "plan_start" : "plan_upgrade", String(evt.data?.id));
+      if (type === "subscription.created" || type === "subscription.updated" || type === "subscription.canceled") {
+        let userId: string | undefined = data.custom_data?.user_id;
+        if (!userId) {
+          const { rows: [u] } = await c.query<{ id: string }>(
+            "SELECT id FROM users WHERE billing_subscription_id = $1", [String(data.id)]);
+          userId = u?.id;
+        }
+        if (!userId) return;
+        const { rows: [u] } = await c.query<{ plan: PlanId }>("SELECT plan FROM users WHERE id = $1 FOR UPDATE", [userId]);
+        if (!u) return;
+        const status: string = data.status ?? "";
+        const ended = type === "subscription.canceled" || status === "canceled";
+        const plan: PlanId | null = ended ? "free" : planForPrice(data.items?.[0]?.price?.id);
+        // A cancellation that only takes effect at the end of the paid period shows as a scheduled change.
+        const shownStatus = !ended && data.scheduled_change?.action === "cancel" ? "cancelling" : status;
+        await c.query(
+          `UPDATE users SET plan = coalesce($2, plan), billing_customer_id = $3, billing_subscription_id = $4,
+             subscription_status = $5 WHERE id = $1`,
+          [userId, plan, data.customer_id ?? null, String(data.id), shownStatus || null]);
+        // First subscription grants the month's credits; an upgrade grants the difference right away.
+        if (plan && plan !== "free" && plan !== u.plan) {
+          const before = type === "subscription.created" ? 0 : (PLANS[u.plan]?.credits ?? 0);
+          const after = PLANS[plan].credits;
+          if (after > before) {
+            await grantIn(c, userId, after - before, type === "subscription.created" ? "plan_start" : "plan_upgrade", String(data.id));
           }
-          break;
         }
-        case "subscription_cancelled": {
-          // keep the plan until it expires at the end of the paid period
-          await c.query("UPDATE users SET subscription_status = 'cancelled' WHERE id = $1", [userId]);
-          break;
-        }
-        case "subscription_expired": {
-          await c.query("UPDATE users SET plan = 'free', subscription_status = 'expired' WHERE id = $1", [userId]);
-          break;
-        }
-        case "subscription_payment_success": {
-          if (attrs.billing_reason === "initial") break;   // covered by subscription_created
-          // New billing month: top up to the plan's allowance; unused credits roll over one month (max 2x).
-          const { rows: [u] } = await c.query<{ plan: PlanId; credits: number }>(
-            "SELECT plan, credits FROM users WHERE id = $1 FOR UPDATE", [userId]);
-          if (!u) break;
-          const allowance = PLANS[u.plan]?.credits ?? 0;
-          const target = Math.min(u.credits + allowance, allowance * 2);
-          const delta = target - u.credits;
-          if (delta > 0) await grantIn(c, userId, delta, "plan_refill", String(evt.data?.id));
-          break;
-        }
+        return;
+      }
+
+      if (type === "transaction.completed" && data.origin === "subscription_recurring" && data.subscription_id) {
+        // New billing month: top up to the plan's allowance; unused credits roll over one month (max 2x).
+        const { rows: [u] } = await c.query<{ id: string; plan: PlanId; credits: number }>(
+          "SELECT id, plan, credits FROM users WHERE billing_subscription_id = $1 FOR UPDATE", [String(data.subscription_id)]);
+        if (!u) return;
+        const allowance = PLANS[u.plan]?.credits ?? 0;
+        const target = Math.min(u.credits + allowance, allowance * 2);
+        const delta = target - u.credits;
+        if (delta > 0) await grantIn(c, u.id, delta, "plan_refill", String(data.id));
       }
     });
     return { ok: true };

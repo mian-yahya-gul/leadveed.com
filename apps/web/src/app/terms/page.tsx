@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Terms of service" };
 
 export default function Terms() {
   return (
-    <LegalPage eyebrow="Legal" title="Terms of service" updated="26 November 2026">
+    <LegalPage eyebrow="Legal" title="Terms of service" updated="27 November 2026">
       <p>These terms govern your use of LeadVeed. By creating an account you agree to them.</p>
       <h2>1. The service</h2>
       <p>LeadVeed lets you search a database of businesses and unlock their contact details using credits. Data comes from open sources and is provided as is; we work hard on accuracy but can&apos;t guarantee every record is current.</p>
@@ -16,6 +16,8 @@ export default function Terms() {
         <li>Free accounts receive 25 credits once. Paid plans add credits each billing month; unused paid credits roll over one month, up to twice the monthly allowance.</li>
         <li>Subscriptions renew automatically until cancelled. You can cancel any time and keep your plan until the end of the paid period.</li>
         <li>Credits have no cash value and can&apos;t be transferred.</li>
+        <li>Our order process is conducted by our online reseller Paddle.com, which is the merchant of record for all our orders and handles payments, tax, invoices and payment-related customer service.</li>
+        <li>You can get a full refund within 14 days of any payment. See our <Link href="/refunds">refund policy</Link>.</li>
       </ul>
       <h2>3. Acceptable use</h2>
       <ul>

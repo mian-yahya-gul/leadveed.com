@@ -122,8 +122,8 @@ CREATE TABLE IF NOT EXISTS users (
   plan            text NOT NULL DEFAULT 'free',     -- free | starter | pro | agency
   credits         integer NOT NULL DEFAULT 25,
   credits_reset_at timestamptz,
-  ls_customer_id  text,
-  ls_subscription_id text,
+  billing_customer_id text,
+  billing_subscription_id text,
   subscription_status text,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
