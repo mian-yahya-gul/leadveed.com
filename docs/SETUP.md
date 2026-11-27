@@ -4,11 +4,11 @@ This takes you from nothing to a live leadveed.com. Everything here is on a free
 Budget about two hours, plus a few hours for the first data import to run on its own.
 
 ```
-Browser ──▶ Cloudflare ──▶ Vercel (Next.js web app, leadveed.com)
-                              │  server-side calls with a secret key
-                              ▼
-                 Cloudflare ──▶ Oracle Cloud VM (api.leadveed.com)
-                                  Caddy ▶ Node API ▶ Postgres + PostGIS
+Browser ──▶ Cloudflare ──▶ Oracle Cloud VM (leadveed.com and api.leadveed.com)
+                                  Caddy ▶ Next.js web app (port 3000)
+                                        │  server-side calls with a secret key
+                                        ▼
+                                  Caddy ▶ Node API (port 4000) ▶ Postgres + PostGIS
                                                   ▶ Typesense (search)
                                   nightly: data import · every 15 min: PageSpeed · daily: backup to R2
 ```
@@ -33,9 +33,9 @@ Browser ──▶ Cloudflare ──▶ Vercel (Next.js web app, leadveed.com)
 2. DNS records:
    | Type | Name | Content | Proxy |
    |---|---|---|---|
+   | A | `@` | your Oracle VM public IP | Proxied (orange) |
+   | A | `www` | your Oracle VM public IP | Proxied (orange) |
    | A | `api` | your Oracle VM public IP | Proxied (orange) |
-   | CNAME | `@` | `cname.vercel-dns.com` | DNS only (grey) |
-   | CNAME | `www` | `cname.vercel-dns.com` | DNS only (grey) |
 3. **SSL/TLS → Overview → Full (strict)**.
 4. **Security → Bots → Bot Fight Mode: on**. Optional: a rate-limit rule on `/api/` paths.
 
@@ -50,7 +50,7 @@ sudo bash setup.sh
 
 The script installs Postgres 16 + PostGIS, Typesense, Node 22, Caddy and the Python pipeline, tunes Postgres
 for 24 GB, opens the firewall, generates every secret into `/etc/leadveed/leadveed.env`, starts the API and
-schedules the jobs. At the end it prints the **internal key** you'll paste into Vercel.
+schedules the jobs. It also builds and starts the web app (step 5).
 
 Check: `curl https://api.leadveed.com/health` should answer `{"ok":true}` once DNS has spread.
 
@@ -83,17 +83,18 @@ journalctl -fu leadveed-import        # follow progress; 4-8 hours the first tim
 After that the nightly timer checks for a new Overture release and imports it automatically (about monthly).
 All The Places is refreshed at the same time.
 
-## 5. Vercel (web app)
+## 5. Web app
 
-1. <https://vercel.com/new> → import the `leadveed.com` GitHub repo.
-2. **Root directory: `apps/web`**. Framework: Next.js (auto-detected).
-3. Environment variables (see `apps/web/.env.example`):
-   - `LEADVEED_API_URL` = `https://api.leadveed.com`
-   - `LEADVEED_INTERNAL_KEY` = the key printed by setup.sh
-   - `NEXT_PUBLIC_SITE_URL` = `https://leadveed.com`, `AUTH_URL` = `https://leadveed.com`
-   - `AUTH_SECRET` = output of `npx auth secret`
-   - Google and Resend keys from steps 6 and 7, Lemon Squeezy links from step 8.
-4. **Settings → Domains**: add `leadveed.com` and `www.leadveed.com`.
+The Next.js web app runs on the same Oracle server, so it costs nothing and has no hosting limits.
+(Vercel's free Hobby plan doesn't allow commercial sites, and Cloudflare's free Workers plan caps CPU
+time per request at a level a server-rendered Next.js app can exceed.)
+
+setup.sh builds it and runs it as the `leadveed-web` service behind Caddy. Its settings live in
+`/etc/leadveed/web.env` (see `infra/oracle/web.env.example`); setup.sh fills in the internal key and
+`AUTH_SECRET`. Add the Google, Resend and Lemon Squeezy values from steps 6 to 8, then run
+`sudo /srv/leadveed/app/infra/oracle/deploy.sh` to rebuild and restart.
+
+Cloudflare caches static files (`/_next/static/...`) at its edge, so most page assets never reach the server.
 
 ## 6. Google sign-in
 
@@ -101,7 +102,7 @@ All The Places is refreshed at the same time.
 app name LeadVeed, your email) → **Credentials → Create OAuth client ID** (Web application):
 - Authorised redirect URI: `https://leadveed.com/api/auth/callback/google`
 
-Put the client ID and secret into Vercel as `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
+Put the client ID and secret into `/etc/leadveed/web.env` as `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
 
 While you're in that project: **APIs & Services → Library → PageSpeed Insights API → Enable**, then
 **Credentials → Create API key** and put it on the server as `PAGESPEED_API_KEY` (25,000 checks a day, free).
@@ -109,7 +110,7 @@ While you're in that project: **APIs & Services → Library → PageSpeed Insigh
 ## 7. Email (Resend)
 
 <https://resend.com> → add domain `leadveed.com` → add the DNS records it shows in Cloudflare → create an API key.
-- Vercel: `AUTH_RESEND_KEY` (magic-link sign-in) and `AUTH_EMAIL_FROM="LeadVeed <login@leadveed.com>"`
+- `/etc/leadveed/web.env`: `AUTH_RESEND_KEY` (magic-link sign-in) and `AUTH_EMAIL_FROM="LeadVeed <login@leadveed.com>"`
 - Server: `RESEND_API_KEY` (removal confirmations)
 
 ## 8. Payments (Lemon Squeezy)
@@ -119,7 +120,7 @@ out to Payoneer or a bank account.
 
 1. Create a store, then three **subscription products**: Starter $19/mo, Pro $49/mo, Agency $99/mo.
    In each product set the **confirmation redirect** to `https://leadveed.com/dashboard?upgraded=1`.
-2. Copy each product's checkout link into Vercel: `LS_CHECKOUT_STARTER`, `LS_CHECKOUT_PRO`, `LS_CHECKOUT_AGENCY`,
+2. Copy each product's checkout link into `/etc/leadveed/web.env`: `LS_CHECKOUT_STARTER`, `LS_CHECKOUT_PRO`, `LS_CHECKOUT_AGENCY`,
    and the customer portal link as `LS_CUSTOMER_PORTAL`.
 3. Copy each product's **variant id** into the server env: `LS_VARIANT_STARTER`, `LS_VARIANT_PRO`, `LS_VARIANT_AGENCY`.
 4. **Settings → Webhooks → +**: URL `https://api.leadveed.com/webhooks/lemonsqueezy`, a signing secret
@@ -132,10 +133,10 @@ out to Payoneer or a bank account.
 - Cloudflare → **R2** → create bucket `leadveed-backups` → **Manage API tokens** → token with Object Read & Write.
   Put the account id, key id and secret on the server (`R2_*`). Accounts, credits, unlocks, lists and removal
   requests are backed up daily; the places data is rebuilt by the importer, so it isn't.
-- Automatic API deploys: in GitHub → **Settings → Secrets → Actions** add `SERVER_HOST` (the VM IP),
+- Automatic deploys: in GitHub → **Settings → Secrets → Actions** add `SERVER_HOST` (the VM IP),
   `SERVER_USER` (`ubuntu`) and `SERVER_SSH_KEY` (a private key whose public half is in `~/.ssh/authorized_keys` on the
   server). Every green build on `main` then runs `infra/oracle/deploy.sh` on the server.
-  Vercel deploys the web app by itself.
+  That rebuilds and restarts both the API and the web app.
 
 ## Day-to-day
 

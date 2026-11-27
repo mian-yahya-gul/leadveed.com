@@ -66,6 +66,8 @@ if [[ ! -f $ENV_FILE ]]; then
   curl -fsSL "https://raw.githubusercontent.com/mian-yahya-gul/leadveed.com/${BRANCH}/infra/oracle/leadveed.env.example" -o $ENV_FILE 2>/dev/null \
     || cp "$(dirname "$0")/leadveed.env.example" $ENV_FILE
   sed -i "s/__DB_PASSWORD__/$DB_PASSWORD/; s/__TYPESENSE_KEY__/$TS_KEY/; s/__INTERNAL_KEY__/$INTERNAL_KEY/" $ENV_FILE
+  # DuckDB gets about a third of RAM during imports (8 GB on a 24 GB server, 4 GB on 12 GB).
+  sed -i "s/^DUCKDB_MEMORY_LIMIT=.*/DUCKDB_MEMORY_LIMIT=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 / 1024 / 3 ))GB/" $ENV_FILE
   chmod 600 $ENV_FILE && chown leadveed:leadveed $ENV_FILE
   echo "Created $ENV_FILE"
 fi
@@ -77,12 +79,13 @@ sed -i "s/^api-key = .*/api-key = ${TYPESENSE_API_KEY}/; s/^api-address = .*/api
 systemctl enable --now typesense-server
 systemctl restart typesense-server
 
-log "Postgres tuning (24 GB RAM)"
+log "Postgres tuning (sized to this server's RAM)"
+MEM_GB=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 / 1024 ))
 PGCONF=/etc/postgresql/16/main/conf.d/leadveed.conf
-cat > $PGCONF <<'PG'
+cat > $PGCONF <<PG
 listen_addresses = 'localhost'
-shared_buffers = 6GB
-effective_cache_size = 14GB
+shared_buffers = $(( MEM_GB / 4 ))GB
+effective_cache_size = $(( MEM_GB * 6 / 10 ))GB
 maintenance_work_mem = 1GB
 work_mem = 64MB
 max_wal_size = 8GB
@@ -112,6 +115,19 @@ cd $APP/app
 sudo -u leadveed npm ci --workspace apps/api --include-workspace-root
 sudo -u leadveed npm run build -w apps/api
 
+log "Web app settings"
+WEB_ENV=/etc/leadveed/web.env
+if [[ ! -f $WEB_ENV ]]; then
+  cp $APP/app/infra/oracle/web.env.example $WEB_ENV
+  sed -i "s/__INTERNAL_KEY__/$INTERNAL_API_KEY/; s#__AUTH_SECRET__#$(openssl rand -base64 32)#" $WEB_ENV
+  chmod 600 $WEB_ENV && chown leadveed:leadveed $WEB_ENV
+  echo "Created $WEB_ENV"
+fi
+
+log "Web build"
+sudo -u leadveed npm ci --workspace apps/web --include-workspace-root
+sudo -u leadveed bash -c "set -a; source $WEB_ENV; set +a; npm run build -w apps/web"
+
 log "Pipeline (Python)"
 [[ -d $APP/venv ]] || sudo -u leadveed python3 -m venv $APP/venv
 sudo -u leadveed $APP/venv/bin/pip install -q --upgrade pip
@@ -122,7 +138,7 @@ log "Services"
 cp $APP/app/infra/oracle/systemd/*.service $APP/app/infra/oracle/systemd/*.timer /etc/systemd/system/
 cp $APP/app/infra/oracle/Caddyfile /etc/caddy/Caddyfile
 systemctl daemon-reload
-systemctl enable --now leadveed-api leadveed-import.timer leadveed-pagespeed.timer leadveed-backup.timer
+systemctl enable --now leadveed-api leadveed-web leadveed-import.timer leadveed-pagespeed.timer leadveed-backup.timer
 systemctl reload caddy || systemctl restart caddy
 
 log "Unattended security updates"
@@ -130,6 +146,7 @@ dpkg-reconfigure -f noninteractive unattended-upgrades
 
 sleep 2
 curl -fsS http://127.0.0.1:4000/health && echo
+curl -fsS -o /dev/null -w "web: HTTP %{http_code}\n" http://127.0.0.1:3000/ || echo "web: not answering yet (check: journalctl -u leadveed-web)"
 cat <<DONE
 
 ✅ LeadVeed server is ready.
@@ -137,8 +154,8 @@ cat <<DONE
 Next steps:
   1. Edit $ENV_FILE and fill in RESEND_API_KEY, PAGESPEED_API_KEY, Lemon Squeezy and R2 values,
      then: sudo systemctl restart leadveed-api
-  2. Copy this value into Vercel as LEADVEED_INTERNAL_KEY:
-       $(grep ^INTERNAL_API_KEY $ENV_FILE | cut -d= -f2)
+  2. Edit $WEB_ENV and fill in the Google, Resend and Lemon Squeezy values,
+     then: sudo /srv/leadveed/app/infra/oracle/deploy.sh
   3. Start the first import now (4-8 hours for the whole world):
        sudo systemctl start leadveed-import && journalctl -fu leadveed-import
 DONE

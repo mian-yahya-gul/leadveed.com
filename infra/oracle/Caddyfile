@@ -1,15 +1,37 @@
 # /etc/caddy/Caddyfile
-# Cloudflare proxies api.leadveed.com to this server. Set Cloudflare SSL mode to "Full (strict)";
-# Caddy gets its own certificate automatically.
-api.leadveed.com {
+# Cloudflare proxies leadveed.com, www.leadveed.com and api.leadveed.com to this server.
+# Set Cloudflare SSL mode to "Full (strict)"; Caddy gets its own certificates automatically.
+
+(common) {
 	encode zstd gzip
-	reverse_proxy 127.0.0.1:4000 {
-		header_up X-Real-IP {http.request.header.CF-Connecting-IP}
-	}
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
 		-Server
+	}
+}
+
+leadveed.com {
+	import common
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+	}
+	log {
+		output file /var/log/caddy/web.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+www.leadveed.com {
+	redir https://leadveed.com{uri} permanent
+}
+
+api.leadveed.com {
+	import common
+	reverse_proxy 127.0.0.1:4000 {
+		header_up X-Real-IP {http.request.header.CF-Connecting-IP}
 	}
 	log {
 		output file /var/log/caddy/api.log {
