@@ -30,12 +30,22 @@ export const PLANS: Record<PlanId, Plan> = {
   },
 };
 
-/** Lemon Squeezy variant id -> plan, from env (LS_VARIANT_STARTER etc). */
-export function planForVariant(variantId: string | number | undefined): PlanId | null {
-  if (variantId === undefined || variantId === null) return null;
-  const v = String(variantId);
+/** Paddle price ids for each paid plan (live catalog). PADDLE_PRICE_STARTER etc override them, e.g. for sandbox. */
+const DEFAULT_PRICES: Record<Exclude<PlanId, "free">, string> = {
+  starter: "pri_01m8ees1p0pvzk6ka0t2ydtnv3",
+  pro: "pri_01m8eet8q6gp33efa2deyr68ch",
+  agency: "pri_01m8eevd7fg5mpj06690rtk0zz",
+};
+
+export function priceIdFor(plan: Exclude<PlanId, "free">): string {
+  return process.env[`PADDLE_PRICE_${plan.toUpperCase()}`] || DEFAULT_PRICES[plan];
+}
+
+/** Paddle price id -> plan. */
+export function planForPrice(priceId: string | undefined | null): PlanId | null {
+  if (!priceId) return null;
   for (const id of ["starter", "pro", "agency"] as const) {
-    if (process.env[`LS_VARIANT_${id.toUpperCase()}`] === v) return id;
+    if (priceIdFor(id) === priceId) return id;
   }
   return null;
 }

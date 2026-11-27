@@ -13,7 +13,7 @@ export function Footer() {
         </div>
         <FooterCol title="Product" links={[["Search leads", "/search"], ["Pricing", "/pricing"], ["Dashboard", "/dashboard"]]} />
         <FooterCol title="Data" links={[["Data sources and licences", "/data-licensing"], ["Remove my data", "/remove-my-data"], ["Data quality score", "/data-licensing#quality"]]} />
-        <FooterCol title="Legal" links={[["Privacy policy", "/privacy"], ["Terms of service", "/terms"]]} />
+        <FooterCol title="Legal" links={[["Privacy policy", "/privacy"], ["Terms of service", "/terms"], ["Refund policy", "/refunds"]]} />
       </div>
       <div className="border-t border-ink-100">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-xs leading-5 text-ink-500 sm:px-6 md:flex-row md:items-center md:justify-between">

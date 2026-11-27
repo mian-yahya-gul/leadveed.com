@@ -19,7 +19,8 @@ export const config = {
   emailFrom: process.env.EMAIL_FROM ?? "LeadVeed <hello@leadveed.com>",
   pagespeedKey: process.env.PAGESPEED_API_KEY ?? "",
   pagespeedDailyBudget: Number(process.env.PAGESPEED_DAILY_BUDGET ?? 20000),
-  lemonSigningSecret: process.env.LEMONSQUEEZY_WEBHOOK_SECRET ?? "",
+  /** Paddle -> Developer tools -> Notifications -> the destination's secret key. */
+  paddleWebhookSecret: process.env.PADDLE_WEBHOOK_SECRET ?? "",
   /** Anonymous visitors can page through this many results before being asked to sign up. */
   anonMaxPages: Number(process.env.ANON_MAX_PAGES ?? 3),
 };

@@ -12,8 +12,8 @@ const d = DB ? describe : describe.skip;
 d("api", async () => {
   process.env.DATABASE_URL = DB;
   process.env.INTERNAL_API_KEY = "test-key";
-  process.env.LEMONSQUEEZY_WEBHOOK_SECRET = "whsec";
-  process.env.LS_VARIANT_STARTER = "111";
+  process.env.PADDLE_WEBHOOK_SECRET = "whsec";
+  process.env.PADDLE_PRICE_STARTER = "pri_test_starter";
   const { buildApp } = await import("../src/app.js");
   const { pool } = await import("../src/lib/db.js");
   const app = await buildApp({ logger: false });
@@ -91,20 +91,44 @@ d("api", async () => {
     expect(part.headers["x-credits-balance"]).toBe("0");
   });
 
-  it("tops up credits from a Lemon Squeezy subscription", async () => {
-    const payload = JSON.stringify({
-      meta: { event_name: "subscription_created", custom_data: { user_id: user.id } },
-      data: { id: `sub_${Date.now()}`, attributes: { variant_id: 111, customer_id: 9, status: "active", created_at: "x" } },
-    });
-    const sig = createHmac("sha256", "whsec").update(payload).digest("hex");
-    const r = await app.inject({ method: "POST", url: "/webhooks/lemonsqueezy", payload,
-      headers: { "content-type": "application/json", "x-signature": sig } });
+  it("starts a plan and refills credits from Paddle webhooks", async () => {
+    const send = (body: object) => {
+      const payload = JSON.stringify(body);
+      const ts = Math.floor(Date.now() / 1000);
+      const h1 = createHmac("sha256", "whsec").update(`${ts}:${payload}`).digest("hex");
+      return app.inject({ method: "POST", url: "/webhooks/paddle", payload,
+        headers: { "content-type": "application/json", "paddle-signature": `ts=${ts};h1=${h1}` } });
+    };
+    const sub = `sub_${Date.now()}`;
+    const me0 = await app.inject({ url: "/v1/me", headers: { ...H, "x-leadveed-user": user.id } });
+    const start: number = me0.json().user.credits;
+    const r = await send({ event_id: `evt_${sub}_1`, event_type: "subscription.created",
+      data: { id: sub, status: "active", customer_id: "ctm_1", custom_data: { user_id: user.id },
+        items: [{ price: { id: "pri_test_starter" } }] } });
     expect(r.statusCode).toBe(200);
     const me = await app.inject({ url: "/v1/me", headers: { ...H, "x-leadveed-user": user.id } });
     expect(me.json().user.plan).toBe("starter");
-    expect(me.json().user.credits).toBe(1000);
-    const bad = await app.inject({ method: "POST", url: "/webhooks/lemonsqueezy", payload,
-      headers: { "content-type": "application/json", "x-signature": "nope" } });
+    expect(me.json().user.credits).toBe(start + 1000);
+
+    // the same event again is ignored
+    expect((await send({ event_id: `evt_${sub}_1`, event_type: "subscription.created",
+      data: { id: sub, status: "active", custom_data: { user_id: user.id }, items: [{ price: { id: "pri_test_starter" } }] } })).json().duplicate).toBe(true);
+
+    // renewal: unused credits roll over, capped at 2x the allowance
+    await pool.query("UPDATE users SET credits = 1000 WHERE id = $1", [user.id]);
+    await send({ event_id: `evt_${sub}_2`, event_type: "transaction.completed",
+      data: { id: "txn_1", origin: "subscription_recurring", subscription_id: sub } });
+    const me2 = await app.inject({ url: "/v1/me", headers: { ...H, "x-leadveed-user": user.id } });
+    expect(me2.json().user.credits).toBe(2000);
+
+    // cancellation at period end drops to free
+    await send({ event_id: `evt_${sub}_3`, event_type: "subscription.canceled",
+      data: { id: sub, status: "canceled", items: [{ price: { id: "pri_test_starter" } }] } });
+    const me3 = await app.inject({ url: "/v1/me", headers: { ...H, "x-leadveed-user": user.id } });
+    expect(me3.json().user.plan).toBe("free");
+
+    const bad = await app.inject({ method: "POST", url: "/webhooks/paddle", payload: "{}",
+      headers: { "content-type": "application/json", "paddle-signature": "ts=1;h1=nope" } });
     expect(bad.statusCode).toBe(401);
   });
 

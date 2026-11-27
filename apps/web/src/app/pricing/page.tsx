@@ -27,7 +27,7 @@ export default async function Pricing() {
             <div key={q} className="card p-6"><h3 className="font-sans font-bold text-ink-950">{q}</h3><p className="mt-2 text-sm leading-6 text-ink-500">{a}</p></div>
           ))}
         </div>
-        <p className="mt-12 text-center text-sm text-ink-500">Payments are processed securely by Lemon Squeezy, our merchant of record. Cards from Pakistan, the Gulf and most countries are accepted.</p>
+        <p className="mt-12 text-center text-sm text-ink-500">Payments are processed securely by Paddle, our merchant of record. Cards from Pakistan, the Gulf and most countries are accepted.</p>
       </main>
       <Footer />
     </>

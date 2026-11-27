@@ -19,6 +19,23 @@ export const PLANS = [
 ] as const;
 
 export type PlanId = (typeof PLANS)[number]["id"];
+export type PaidPlanId = Exclude<PlanId, "free">;
+
+/** Paddle price ids (live catalog). PADDLE_PRICE_STARTER etc override them, e.g. for the sandbox. Keep in step with the API. */
+const PADDLE_PRICES: Record<PaidPlanId, string> = {
+  starter: "pri_01m8ees1p0pvzk6ka0t2ydtnv3",
+  pro: "pri_01m8eet8q6gp33efa2deyr68ch",
+  agency: "pri_01m8eevd7fg5mpj06690rtk0zz",
+};
+
+export function isPaidPlan(id: string): id is PaidPlanId {
+  return id === "starter" || id === "pro" || id === "agency";
+}
+
+/** Server-side only: reads env at request time. */
+export function paddlePriceId(plan: PaidPlanId): string {
+  return process.env[`PADDLE_PRICE_${plan.toUpperCase()}`] || PADDLE_PRICES[plan];
+}
 
 /** Rough display conversions; billing is always in USD. Update now and then. */
 export const CURRENCIES = {

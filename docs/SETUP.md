@@ -91,7 +91,7 @@ time per request at a level a server-rendered Next.js app can exceed.)
 
 setup.sh builds it and runs it as the `leadveed-web` service behind Caddy. Its settings live in
 `/etc/leadveed/web.env` (see `infra/oracle/web.env.example`); setup.sh fills in the internal key and
-`AUTH_SECRET`. Add the Google, Resend and Lemon Squeezy values from steps 6 to 8, then run
+`AUTH_SECRET`. Add the Google, Resend and Paddle values from steps 6 to 8, then run
 `sudo /srv/leadveed/app/infra/oracle/deploy.sh` to rebuild and restart.
 
 Cloudflare caches static files (`/_next/static/...`) at its edge, so most page assets never reach the server.
@@ -113,20 +113,23 @@ While you're in that project: **APIs & Services → Library → PageSpeed Insigh
 - `/etc/leadveed/web.env`: `AUTH_RESEND_KEY` (magic-link sign-in) and `AUTH_EMAIL_FROM="LeadVeed <login@leadveed.com>"`
 - Server: `RESEND_API_KEY` (removal confirmations)
 
-## 8. Payments (Lemon Squeezy)
+## 8. Payments (Paddle)
 
-Lemon Squeezy is the merchant of record, so it handles tax and accepts cards from Pakistan and the Gulf, and pays
-out to Payoneer or a bank account.
+Paddle is the merchant of record: it sells to the customer, handles tax worldwide, accepts sellers based in
+Pakistan, and pays out by bank transfer or Payoneer. (Lemon Squeezy closed to new sellers in November 2026.)
 
-1. Create a store, then three **subscription products**: Starter $19/mo, Pro $49/mo, Agency $99/mo.
-   In each product set the **confirmation redirect** to `https://leadveed.com/dashboard?upgraded=1`.
-2. Copy each product's checkout link into `/etc/leadveed/web.env`: `LS_CHECKOUT_STARTER`, `LS_CHECKOUT_PRO`, `LS_CHECKOUT_AGENCY`,
-   and the customer portal link as `LS_CUSTOMER_PORTAL`.
-3. Copy each product's **variant id** into the server env: `LS_VARIANT_STARTER`, `LS_VARIANT_PRO`, `LS_VARIANT_AGENCY`.
-4. **Settings → Webhooks → +**: URL `https://api.leadveed.com/webhooks/lemonsqueezy`, a signing secret
-   (put it on the server as `LEMONSQUEEZY_WEBHOOK_SECRET`), events: `subscription_created`, `subscription_updated`,
-   `subscription_cancelled`, `subscription_expired`, `subscription_payment_success`.
-5. `sudo systemctl restart leadveed-api`.
+1. The three subscription products already exist in the live catalog: Starter $19/mo, Pro $49/mo, Agency $99/mo.
+   Their price ids are built into `apps/api/src/plans.ts` and `apps/web/src/lib/plans.ts`.
+2. **Checkout → Checkout settings**: set the default payment link to `https://leadveed.com/checkout`, and request
+   approval for the `leadveed.com` domain (Paddle reviews the live site: pricing, terms, refund and privacy pages).
+   Copy the customer portal link into `/etc/leadveed/web.env` as `PADDLE_CUSTOMER_PORTAL`.
+3. **Developer tools → Authentication → Client-side tokens**: create one and put it in `/etc/leadveed/web.env` as
+   `PADDLE_CLIENT_TOKEN`.
+4. **Developer tools → Notifications → New destination**: URL `https://api.leadveed.com/webhooks/paddle`, events
+   `subscription.created`, `subscription.updated`, `subscription.canceled`, `transaction.completed`. Put its
+   secret key on the server as `PADDLE_WEBHOOK_SECRET`.
+5. Finish **Business account → Verification** (ID and payout details) so live payments can start.
+6. `sudo systemctl restart leadveed-api leadveed-web`.
 
 ## 9. Backups (Oracle Object Storage) and automatic deploys
 

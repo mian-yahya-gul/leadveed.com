@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
 import { grade, maskEmail, maskPhone, maskUrl } from "../src/lib/leads.js";
 import { SearchQuery, typesenseParams } from "../src/lib/search.js";
-import { verifySignature } from "../src/routes/billing.js";
+import { verifyPaddleSignature } from "../src/routes/billing.js";
 
 describe("masking", () => {
   it("hides the middle of phone numbers", () => {
@@ -31,13 +31,20 @@ describe("typesense query", () => {
   });
 });
 
-describe("lemon squeezy signature", () => {
-  it("accepts a valid HMAC and rejects others", () => {
-    const raw = Buffer.from('{"a":1}');
-    const sig = createHmac("sha256", "s3cret").update(raw).digest("hex");
-    expect(verifySignature(raw, sig, "s3cret")).toBe(true);
-    expect(verifySignature(raw, sig, "other")).toBe(false);
-    expect(verifySignature(raw, undefined, "s3cret")).toBe(false);
+describe("paddle signature", () => {
+  const raw = Buffer.from('{"a":1}');
+  const sign = (ts: number, secret: string) => createHmac("sha256", secret).update(`${ts}:`).update(raw).digest("hex");
+  it("accepts a valid, fresh signature and rejects others", () => {
+    const now = 1_800_000_000;
+    expect(verifyPaddleSignature(raw, `ts=${now};h1=${sign(now, "s3cret")}`, "s3cret", now)).toBe(true);
+    expect(verifyPaddleSignature(raw, `ts=${now};h1=${sign(now, "s3cret")}`, "other", now)).toBe(false);
+    expect(verifyPaddleSignature(raw, undefined, "s3cret", now)).toBe(false);
+    expect(verifyPaddleSignature(raw, `ts=${now};h1=nope`, "s3cret", now)).toBe(false);
+  });
+  it("rejects old signatures and accepts any h1 during secret rotation", () => {
+    const now = 1_800_000_000, old = now - 3600;
+    expect(verifyPaddleSignature(raw, `ts=${old};h1=${sign(old, "s3cret")}`, "s3cret", now)).toBe(false);
+    expect(verifyPaddleSignature(raw, `ts=${now};h1=${sign(now, "previous")};h1=${sign(now, "s3cret")}`, "s3cret", now)).toBe(true);
   });
 });
 
