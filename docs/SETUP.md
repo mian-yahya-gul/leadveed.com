@@ -10,7 +10,7 @@ Browser ──▶ Cloudflare ──▶ Oracle Cloud VM (leadveed.com and api.lea
                                         ▼
                                   Caddy ▶ Node API (port 4000) ▶ Postgres + PostGIS
                                                   ▶ Typesense (search)
-                                  nightly: data import · every 15 min: PageSpeed · daily: backup to R2
+                                  nightly: data import · every 15 min: PageSpeed · daily: backup to Oracle Object Storage
 ```
 
 ## 1. Oracle Cloud server (free forever)
@@ -128,10 +128,15 @@ out to Payoneer or a bank account.
    `subscription_cancelled`, `subscription_expired`, `subscription_payment_success`.
 5. `sudo systemctl restart leadveed-api`.
 
-## 9. Backups (Cloudflare R2) and automatic deploys
+## 9. Backups (Oracle Object Storage) and automatic deploys
 
-- Cloudflare → **R2** → create bucket `leadveed-backups` → **Manage API tokens** → token with Object Read & Write.
-  Put the account id, key id and secret on the server (`R2_*`). Accounts, credits, unlocks, lists and removal
+- Backups go to Oracle Object Storage, which is part of Always Free (20 GB), so no extra account or card is needed.
+  Oracle console → **Storage → Buckets** → create `leadveed-backups` (Standard tier, private). Then
+  **Profile → User settings → Customer secret keys → Generate** and copy the key id and secret.
+  Put them on the server as `BACKUP_S3_KEY_ID` / `BACKUP_S3_SECRET`, and set
+  `BACKUP_S3_ENDPOINT=https://<namespace>.compat.objectstorage.ap-singapore-1.oraclecloud.com`
+  (the namespace is shown on the tenancy page, or `oci os ns get`). Any other S3-compatible bucket works too
+  (set `BACKUP_S3_PROVIDER`, e.g. `Cloudflare` for R2). Accounts, credits, unlocks, lists and removal
   requests are backed up daily; the places data is rebuilt by the importer, so it isn't.
 - Automatic deploys: in GitHub → **Settings → Secrets → Actions** add `SERVER_HOST` (the VM IP),
   `SERVER_USER` (`ubuntu`) and `SERVER_SSH_KEY` (a private key whose public half is in `~/.ssh/authorized_keys` on the
